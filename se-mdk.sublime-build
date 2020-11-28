@@ -1,0 +1,5 @@
+{
+  "target": "mdk_build",
+  "cancel": { "kill": true },
+  "selector": "source.cs"
+}

@@ -1,0 +1,18 @@
+{
+  // example manifest (these are the defaults in the script)
+  // output dir, relative to manifest
+  "build_dir": "./build",
+
+  // main output file
+  "output": "Script.cs",
+
+  // main input file - entrypoint for all other scripts (usually the one with public Program...)
+  "main": "src/main.cs",
+
+  // files to include - uses glob pattern, accepts folders too (relative to manifest)
+  // eg: files="src/**/*.cs ../rename/* ../../local/lidar/ ./src/a"
+  "files": "*",
+
+  // set to true to include mdk's thumb, or set to a path to use another png file
+  "thumb": true
+}
