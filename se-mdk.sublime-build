@@ -1,5 +1,7 @@
 {
   "target": "mdk_build",
   "cancel": { "kill": true },
-  "selector": "source.cs"
+  "selector": "source.cs",
+  "file_patterns": ["*.cs"],
+  "file_regex": "^(.*\\.cs)\\((\\d*),(\\d*)\\): (.*)"
 }

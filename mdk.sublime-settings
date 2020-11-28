@@ -10,9 +10,12 @@
   "main": "src/main.cs",
 
   // files to include - uses glob pattern, accepts folders too (relative to manifest)
-  // eg: files="src/**/*.cs ../rename/* ../../local/lidar/ ./src/a"
+  // eg: files="src/**/*.cs,../rename/*,../../local/lidar/,./src/a"
   "files": "*",
 
   // set to true to include mdk's thumb, or set to a path to use another png file
-  "thumb": true
+  "thumb": true,
+
+  // SE game dir (if it's installed elsewhere)
+  "se_game_dir": "c:\\program files (x86)\\steam\\SteamApps\\common\\SpaceEngineers"
 }
