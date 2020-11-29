@@ -19,18 +19,14 @@ default_main = "main.cs"
 default_files = "*"
 default_thumb = True
 default_se_game_dir = "c:\\program files (x86)\\steam\\SteamApps\\common\\SpaceEngineers"
-error_style = sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE | sublime.DRAW_SQUIGGLY_UNDERLINE
 
-def underline_error(error_regions):
-    view.add_regions(
-        "syntacticDiag",
-        error_regions,
-        "invalid.illegal",
-        "",
-        error_style
-    )
+error_style = sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE | sublime.DRAW_SQUIGGLY_UNDERLINE
+errs_by_file = {}
+error_regions = []
 
 class MdkBuildCommand(sublime_plugin.WindowCommand):
+    phantom_sets_by_buffer = None
+    regions = []
     build_dir = None
     encoding = None
     file_regex = None
@@ -47,9 +43,6 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
     se_game_dir = None
     thumb = None
 
-    errs_by_file = {}
-    phantom_sets_by_buffer = {}
-
     def run(self, **kwargs):
         try:
             self.build()
@@ -58,10 +51,11 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
             self.log(traceback.format_exc())
 
     def build(self):
-        self.hide_phantoms()
         if not self.import_settings():
             return 1
         self.log("Build started: {}".format(datetime.now()))
+
+        self.hide_errors()
 
         targets = self.collect_build_files()
         if targets is None:
@@ -284,23 +278,6 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
 
         return self.proc.returncode
 
-    def show_errors(self):
-        preferences = sublime.load_settings("Preferences.sublime-settings")
-
-        if preferences.get("show_errors_inline", True):
-            errs = self.panel.find_all_results_with_text()
-            errs_by_file = {}
-            for file, line, column, text in errs:
-                print("{} - {} - {} - {}".format(file, line, column, text))
-                if file not in errs_by_file:
-                    errs_by_file[file] = []
-                errs_by_file[file].append((line, column, text))
-            self.errs_by_file = errs_by_file
-
-            self.update_phantoms()
-        else:
-            self.hide_phantoms()
-
     def process_file(self, handle, fone):
         chunk_size = 2 ** 13
         out = b''
@@ -336,16 +313,58 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
             return self.proc is not None and self.proc.poll() is None
         return True
 
+    def hide_errors(self):
+        self.hide_phantoms()
+        self.window.active_view().erase_regions("syntacticDiag")
+
+    def show_errors(self):
+        global errs_by_file
+        self.hide_errors()
+
+        preferences = sublime.load_settings("Preferences.sublime-settings")
+        errs = self.panel.find_all_results_with_text()
+
+        errs_by_file = {}
+        for file, line, column, text in errs:
+            if file not in errs_by_file:
+                errs_by_file[file] = []
+            errs_by_file[file].append((line, column, text))
+
+        self.write_squigglies()
+
+        if preferences.get("show_errors_inline", True):
+            self.update_phantoms()
+
+    def write_squigglies(self):
+        global errs_by_file
+        global error_regions
+
+        for file, errs in errs_by_file.items():
+            view = self.window.find_open_file(file)
+
+            if view:
+                regions = []
+
+                for line, column, text in errs:
+                    pt = view.text_point(line - 1, column - 1)
+                    region = sublime.Region(pt, view.line(pt).b)
+                    regions.append(region)
+                    error_regions.append((region, (text, line, column)))
+
+                view.add_regions("syntacticDiag", regions, "invalid.illegal", "", error_style)
+
     def on_phantom_navigate(self, url):
         self.hide_phantoms()
 
     def hide_phantoms(self):
-        for file, errs in self.errs_by_file.items():
+        global errs_by_file
+
+        for file, errs in errs_by_file.items():
             view = self.window.find_open_file(file)
             if view:
                 view.erase_phantoms("exec")
 
-        self.errs_by_file = {}
+        errs_by_file = {}
         self.phantom_sets_by_buffer = {}
         self.show_errors_inline = False
 
@@ -385,12 +404,10 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
             </style>
         '''
 
-        for file, errs in self.errs_by_file.items():
-            print(file, errs)
+        for file, errs in errs_by_file.items():
             view = self.window.find_open_file(file)
-            print(view)
-            if view:
 
+            if view:
                 buffer_id = view.buffer_id()
                 if buffer_id not in self.phantom_sets_by_buffer:
                     phantom_set = sublime.PhantomSet(view, "exec")
@@ -401,9 +418,7 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
                 phantoms = []
 
                 for line, column, text in errs:
-
-                    pt = view.text_point(line - 2, column - 1)
-                    print(line, column, pt, view.line(pt).b)
+                    pt = view.text_point(line - 1, column - 1)
                     phantoms.append(sublime.Phantom(
                         sublime.Region(pt, view.line(pt).b),
                         ('<body id=inline-error>' + stylesheet +
@@ -411,8 +426,29 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
                             '<span class="message">' + html.escape(text, quote=False) + '</span>' +
                             '<a href=hide>' + chr(0x00D7) + '</a></div>' +
                             '</body>'),
-                        # sublime.LAYOUT_BLOCK,
                         sublime.LAYOUT_BELOW,
                         on_navigate=self.on_phantom_navigate))
 
                 phantom_set.update(phantoms)
+
+class SeMdkEventListener(sublime_plugin.EventListener):
+    def on_hover(self, view, point, hover_zone=sublime.HOVER_TEXT):
+        global error_regions
+
+        for region, data in error_regions:
+            if region.contains(point):
+                self.on_hover_error(view, data, point)
+
+    def on_hover_error(self, view, data, point):
+        text, line, col = data
+        view.show_popup(
+            "<span>{0}</span>".format(text),
+            flags=sublime.HIDE_ON_MOUSE_MOVE_AWAY,
+            location=point,
+            max_height=300,
+            max_width=view.viewport_extent()[0]
+            # on_navigate=on_navigate
+        )
+
+    def on_modified(self, view):
+        view.erase_regions("syntacticDiag")
