@@ -279,7 +279,7 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
             self.log("Build success")
         else:
             self.show_errors()
-            self.log("Build failed ({})", self.proc.returncode)
+            self.log("Build failed ({})".format(self.proc.returncode))
 
 
         return self.proc.returncode
