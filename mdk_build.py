@@ -7,42 +7,48 @@ import threading
 
 import re
 import glob
-import json
 import shutil
 import traceback
 from datetime import datetime
+import html
 
-# def copy(view, text):
-#     sublime.set_clipboard(text)
-#     view.hide_popup()
-#     sublime.status_message('Scope name copied to clipboard')
-# self.win_temp = manifest.get('win_temp', '/mnt/c/Users/mcgow/AppData/Local/Temp')
-# self.mdk_root = manifest.get('mdk_root', '$(cd $(dirname $0)/.. && pwd)')
-# self.mdk_root_win = manifest.get('mdk_root_win', '$(wslpath -w $mdk_root)')
-# self.compileFiles = manifest.get('compileFiles', '()')
+default_encoding = "utf-8"
+default_build_dir = "./build"
+default_output = "Script.cs"
+default_main = "main.cs"
+default_files = "*"
+default_thumb = True
+default_se_game_dir = "c:\\program files (x86)\\steam\\SteamApps\\common\\SpaceEngineers"
+error_style = sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE | sublime.DRAW_SQUIGGLY_UNDERLINE
 
-# cmd = "path to the .exe file " + view.fileName()
-#       view.window().runCommand("exec","",cmd])
+def underline_error(error_regions):
+    view.add_regions(
+        "syntacticDiag",
+        error_regions,
+        "invalid.illegal",
+        "",
+        error_style
+    )
 
 class MdkBuildCommand(sublime_plugin.WindowCommand):
-    mdk_root = os.path.dirname(os.path.abspath(__file__))
-    manifest_filename = 'mdk.sublime-settings'
-    panel = None
-    manifest_dir = None
-    manifest_dir = None
-    file_regex = None
-    encoding = None
     build_dir = None
-    output = None
-    main = None
+    encoding = None
+    file_regex = None
     files = None
-    thumb = None
-    se_game_dir = None
-
-    panel_lock = threading.Lock()
     killed = False
+    main = None
+    manifest_dir = None
+    manifest_filename = 'mdk.sublime-settings'
+    mdk_root = os.path.dirname(os.path.abspath(__file__))
+    output = None
+    panel = None
+    panel_lock = threading.Lock()
     proc = None
-    encoding = 'utf-8'
+    se_game_dir = None
+    thumb = None
+
+    errs_by_file = {}
+    phantom_sets_by_buffer = {}
 
     def run(self, **kwargs):
         try:
@@ -52,8 +58,10 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
             self.log(traceback.format_exc())
 
     def build(self):
+        self.hide_phantoms()
         if not self.import_settings():
             return 1
+        self.log("Build started: {}".format(datetime.now()))
 
         targets = self.collect_build_files()
         if targets is None:
@@ -62,57 +70,64 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
 
         compile_files = self.prepare(targets)
         self.log("\n".join(compile_files))
-        bat_file = self.compile(compile_files)
-        exitcode = self.run_bat(bat_file)
 
-        if exitcode == 0:
-            self.onSuccess(targets)
-            self.log('Build success')
-        else:
-            self.log('Build failed')
+        bat_file = self.generate_compile_script(compile_files)
+        thread = self.start_compile_thread(bat_file, targets)
 
-    def setup_build_panel(self, working_dir=None):
-        if working_dir == None:
-            working_dir = self.manifest_dir
-
+    def setup_build_panel(self):
         with self.panel_lock:
             self.panel = self.window.create_output_panel("panel")
             settings = self.panel.settings()
-            settings.set('result_file_regex', r"^(.*\.cs)\((\d*),(\d*)\): .*")
-            settings.set('result_line_regex', r"^(.*\.cs)\((\d*),(\d*)\): .*")
-            settings.set('result_base_dir', self.working_dir)
 
-            preferences = sublime.load_settings('Preferences.sublime-settings')
-            if preferences.get('show_panel_on_build'):
-                self.window.run_command('show_panel', { "panel": "output.panel" })
+            settings.set("result_file_regex", r"^(.*\.cs)\((\d*),(\d*),\d*,\d*\): (.*)")
+            settings.set("result_line_regex", r"^(.*\.cs)\((\d*),(\d*),\d*,\d*\): (.*)")
+            settings.set("result_base_dir", self.manifest_dir)
 
-    def compile(self, files):
+            preferences = sublime.load_settings("Preferences.sublime-settings")
+            if preferences.get("show_panel_on_build"):
+                self.window.run_command("show_panel", { "panel": "output.panel" })
+
+    def generate_compile_script(self, files):
         bat_out = os.path.join(self.build_dir, "compile.bat")
-        bat_tpl = os.path.join(self.mdk_root, 'MDK/compile.bat')
+        bat_tpl = os.path.join(self.mdk_root, "MDK/compile.bat")
 
         try:
             os.remove(bat_out)
         except:
             pass
 
-        with open(bat_out, "a") as bat_file:
-            with open(bat_tpl, "r") as bat_head:
-                content = " ".join(
-                    bat_head.read().replace('MDK_ROOT', self.mdk_root)
-                    .replace('SE_GAME_DIR', self.se_game_dir).split("\n")
-                    )
-                bat_file.write(content)
+        content = None
 
-            bat_file.write('"{}"'.format('" "'.join(files)))
+        with open(bat_tpl, "r") as bat_head:
+            content = (
+                bat_head.read()
+                .replace("MDK_ROOT", self.mdk_root)
+                .replace("SE_GAME_DIR", self.se_game_dir)
+                .replace("INJECT_FILES", '" "'.join(files))
+            ).replace("\n", " ")
+
+        with open(bat_out, "w") as bat_file:
+            bat_file.write(content)
 
         return bat_out
 
-    def onSuccess(self, files):
+    def on_success(self, files):
         for file in ['Bootstrapper.exe', 'compile.bat']:
             try:
                 os.remove(os.path.join(self.build_dir, file))
             except:
                 pass
+
+        thumb_src = None
+
+        if self.thumb == True:
+            thumb_src = os.path.join(self.mdk_root, 'MDK/thumb.png')
+            # copy mdk thumb
+        elif self.thumb:
+            thumb_src = self.thumb
+
+        if thumb_src is not None:
+            shutil.copyfile(thumb_src, os.path.join(os.path.dirname(self.output), 'thumb.png'))
 
         with open(self.output, 'wb') as out_fd:
             for f in files:
@@ -160,12 +175,7 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
             filename = os.path.realpath(file_path)
             _, file_extension = os.path.splitext(filename)
 
-            if (
-                file_extension != '.cs' or
-                filename == self.output or
-                filename == self.main or
-                filename == self.build_dir
-                ):
+            if (file_extension != '.cs' or filename == self.output or filename == self.main or filename == self.build_dir):
                 return
 
             files[filename] = True
@@ -188,21 +198,20 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
         window_vars = self.window.extract_variables()
         self.working_dir = window_vars['file_path']
 
-        self.setup_build_panel(self.working_dir)
-
         manifest = self.find_manifest()
         if manifest is None:
+            print("no manifest")
             return False
 
-        settings = self.panel.settings()
-        settings.set("result_base_dir", self.manifest_dir)
-        self.encoding = manifest.get("encoding", "utf-8")
-        self.build_dir = os.path.realpath(manifest.get("build_dir", "{}/build".format(os.getcwd())))
-        self.output = os.path.realpath(manifest.get("output", "Script.cs"))
-        self.main = os.path.realpath(manifest.get("main", "main.cs"))
-        self.files = manifest.get("files", "*")
-        self.thumb = manifest.get("thumb", True)
-        self.se_game_dir = os.path.realpath(manifest.get("se_game_dir", "c:\\program files (x86)\\steam\\SteamApps\\common\\SpaceEngineers"))
+        self.setup_build_panel()
+
+        self.encoding = manifest.get("encoding", default_encoding)
+        self.build_dir = os.path.realpath(manifest.get("build_dir", default_build_dir))
+        self.output = os.path.realpath(manifest.get("output", default_output))
+        self.main = os.path.realpath(manifest.get("main", default_main))
+        self.files = manifest.get("files", default_files)
+        self.thumb = manifest.get("thumb", default_thumb)
+        self.se_game_dir = os.path.realpath(manifest.get("se_game_dir", default_se_game_dir))
 
         return True
 
@@ -229,11 +238,18 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
     def log(self, msg, newline=True):
         if self.panel is not None:
             with self.panel_lock:
-                self.panel.run_command("append", {
-                    "characters": "{}{}".format(msg, "\n" if newline else None)
-                })
+                data = "{}{}".format(msg, "\n" if newline else None).replace('\r\n', '\n').replace('\r', '\n')
+                self.panel.run_command("append", { "characters": data })
+        else:
+            print(msg)
 
-    def run_bat(self, path_to_bat):
+    def start_compile_thread(self, path_to_bat, targets):
+        thread = threading.Thread(target=self.run_build_in_thread, args=(path_to_bat, targets,))
+        thread.start()
+
+        return thread;
+
+    def run_build_in_thread(self, path_to_bat, targets):
         if self.proc is not None:
             self.proc.terminate()
             self.proc = None
@@ -243,35 +259,59 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
         info.dwFlags = subprocess.STARTF_USESHOWWINDOW
         info.wShowWindow = SW_HIDE
 
-        self.proc = subprocess.Popen(
-            path_to_bat,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            cwd=self.build_dir,
-            startupinfo=info
-        )
+        self.proc = subprocess.Popen(path_to_bat, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=self.build_dir, startupinfo=info)
         self.killed = False
 
-        threading.Thread(target=self.read_handle, args=(self.proc.stdout,)).start()
-        return self.proc.wait()
+        if self.proc.stdout:
+            threading.Thread(target=self.process_file, args=(self.proc.stdout, True)).start()
 
-    def read_handle(self, handle):
+        if self.proc.stderr:
+            threading.Thread(target=self.process_file, args=(self.proc.stderr, False)).start()
+
+        try:
+            self.proc.wait(timeout=15)
+        except:
+            self.proc.kill()
+            self.log(traceback.format_exc())
+
+        if self.proc.returncode == 0:
+            self.on_success(targets)
+            self.log("Build success")
+        else:
+            self.show_errors()
+            self.log("Build failed ({})", self.proc.returncode)
+
+
+        return self.proc.returncode
+
+    def show_errors(self):
+        preferences = sublime.load_settings("Preferences.sublime-settings")
+
+        if preferences.get("show_errors_inline", True):
+            errs = self.panel.find_all_results_with_text()
+            errs_by_file = {}
+            for file, line, column, text in errs:
+                print("{} - {} - {} - {}".format(file, line, column, text))
+                if file not in errs_by_file:
+                    errs_by_file[file] = []
+                errs_by_file[file].append((line, column, text))
+            self.errs_by_file = errs_by_file
+
+            self.update_phantoms()
+        else:
+            self.hide_phantoms()
+
+    def process_file(self, handle, fone):
         chunk_size = 2 ** 13
         out = b''
         while True:
             try:
                 data = os.read(handle.fileno(), chunk_size)
-                # If exactly the requested number of bytes was
-                # read, there may be more data, and the current
-                # data may contain part of a multibyte char
                 out += data
                 if len(data) == chunk_size:
                     continue
                 if data == b'' and out == b'':
                     raise IOError('EOF')
-                # We pass out to a function to ensure the
-                # timeout gets the value of out right now,
-                # rather than a future (mutated) version
                 self.queue_write(out.decode(self.encoding))
                 if data == b'':
                     raise IOError('EOF')
@@ -283,30 +323,96 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
 
             except (IOError):
                 if self.killed:
-                    msg = 'Cancelled'
+                    self.queue_write('\n[Cancelled]')
                 else:
-                    msg = 'Finished'
-                self.queue_write('\n[{}]'.format(msg))
+                    self.queue_write('\n[Finished]')
                 break
 
     def queue_write(self, text):
         sublime.set_timeout(lambda: self.log(text.replace(self.build_dir, self.manifest_dir)), 1)
 
-    def is_enabled(self, lint=False, integration=False, kill=False):
-        # The Cancel build option should only be available
-        # when the process is still running
+    def is_enabled(self, kill=False):
         if kill:
             return self.proc is not None and self.proc.poll() is None
         return True
 
+    def on_phantom_navigate(self, url):
+        self.hide_phantoms()
 
-#         scope = self.view.scope_name(self.view.sel()[-1].b)
+    def hide_phantoms(self):
+        for file, errs in self.errs_by_file.items():
+            view = self.window.find_open_file(file)
+            if view:
+                view.erase_phantoms("exec")
 
-#         html = """
-# <style>
-# body { margin: 0 8; }
-# </style>
-# <p>%s</p><p><a href="%s">Copy</a></p>
-# """ % (scope.replace(' ', '<br>'), scope.rstrip())
+        self.errs_by_file = {}
+        self.phantom_sets_by_buffer = {}
+        self.show_errors_inline = False
 
-#         self.view.show_popup(html, on_navigate=lambda x: copy(self.view, x))
+    def update_phantoms(self):
+        stylesheet = '''
+            <style>
+                div.error-arrow {
+                    border-top: 0.4rem solid transparent;
+                    border-left: 0.5rem solid color(var(--redish) blend(var(--background) 30%));
+                    width: 0;
+                    height: 0;
+                }
+                div.error {
+                    padding: 0.4rem 0 0.4rem 0.7rem;
+                    margin: 0 0 0.2rem;
+                    border-radius: 0 0.2rem 0.2rem 0.2rem;
+                }
+
+                div.error span.message {
+                    padding-right: 0.7rem;
+                }
+
+                div.error a {
+                    text-decoration: inherit;
+                    padding: 0.35rem 0.7rem 0.45rem 0.8rem;
+                    position: relative;
+                    bottom: 0.05rem;
+                    border-radius: 0 0.2rem 0.2rem 0;
+                    font-weight: bold;
+                }
+                html.dark div.error a {
+                    background-color: #00000018;
+                }
+                html.light div.error a {
+                    background-color: #ffffff18;
+                }
+            </style>
+        '''
+
+        for file, errs in self.errs_by_file.items():
+            print(file, errs)
+            view = self.window.find_open_file(file)
+            print(view)
+            if view:
+
+                buffer_id = view.buffer_id()
+                if buffer_id not in self.phantom_sets_by_buffer:
+                    phantom_set = sublime.PhantomSet(view, "exec")
+                    self.phantom_sets_by_buffer[buffer_id] = phantom_set
+                else:
+                    phantom_set = self.phantom_sets_by_buffer[buffer_id]
+
+                phantoms = []
+
+                for line, column, text in errs:
+
+                    pt = view.text_point(line - 2, column - 1)
+                    print(line, column, pt, view.line(pt).b)
+                    phantoms.append(sublime.Phantom(
+                        sublime.Region(pt, view.line(pt).b),
+                        ('<body id=inline-error>' + stylesheet +
+                            '<div class="error-arrow"></div><div class="error">' +
+                            '<span class="message">' + html.escape(text, quote=False) + '</span>' +
+                            '<a href=hide>' + chr(0x00D7) + '</a></div>' +
+                            '</body>'),
+                        # sublime.LAYOUT_BLOCK,
+                        sublime.LAYOUT_BELOW,
+                        on_navigate=self.on_phantom_navigate))
+
+                phantom_set.update(phantoms)
