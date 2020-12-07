@@ -4,6 +4,7 @@ import sublime_plugin
 import os
 import subprocess
 import threading
+import signal
 
 import re
 import glob
@@ -63,7 +64,7 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
             return 1
 
         compile_files = self.prepare(targets)
-        self.log("\n".join(compile_files))
+        # self.log("\n".join(compile_files))
 
         bat_file = self.generate_compile_script(compile_files)
         thread = self.start_compile_thread(bat_file, targets)
@@ -256,17 +257,15 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
         self.proc = subprocess.Popen(path_to_bat, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=self.build_dir, startupinfo=info)
         self.killed = False
 
-        if self.proc.stdout:
-            threading.Thread(target=self.process_file, args=(self.proc.stdout, True)).start()
+        def kill():
+            self.log("Timeout - killing")
+            subprocess.call(['taskkill', '/F', '/T', '/PID',  str(self.proc.pid)], startupinfo=info)
 
-        if self.proc.stderr:
-            threading.Thread(target=self.process_file, args=(self.proc.stderr, False)).start()
-
-        try:
-            self.proc.wait(timeout=15)
-        except:
-            self.proc.kill()
-            self.log(traceback.format_exc())
+        t = threading.Timer(10.0, kill)
+        t.start()
+        stdout, stderr = self.proc.communicate()
+        t.cancel()
+        self.log(stdout.decode(self.encoding).replace(self.build_dir, self.manifest_dir))
 
         if self.proc.returncode == 0:
             self.on_success(targets)
@@ -314,8 +313,10 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
         return True
 
     def hide_errors(self):
+        global error_regions
         self.hide_phantoms()
         self.window.active_view().erase_regions("syntacticDiag")
+        error_regions = []
 
     def show_errors(self):
         global errs_by_file
@@ -431,15 +432,29 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
 
                 phantom_set.update(phantoms)
 
-class SeMdkEventListener(sublime_plugin.EventListener):
-    def on_hover(self, view, point, hover_zone=sublime.HOVER_TEXT):
+class SeMdkEventListener(sublime_plugin.ViewEventListener):
+    def is_csharp(self):
+        if len(self.view.sel()) == 0:
+            return False
+
+        location = self.view.sel()[0].begin()
+
+        return self.view.match_selector(location, 'source.cs')
+
+    def on_hover(self, point, hover_zone=sublime.HOVER_TEXT):
+        if not self.is_csharp():
+            return
+
         global error_regions
 
         for region, data in error_regions:
             if region.contains(point):
-                self.on_hover_error(view, data, point)
+                self.on_hover_error(self.view, data, point)
 
     def on_hover_error(self, view, data, point):
+        if not self.is_csharp():
+            return
+
         text, line, col = data
         view.show_popup(
             "<span>{0}</span>".format(text),
@@ -450,5 +465,8 @@ class SeMdkEventListener(sublime_plugin.EventListener):
             # on_navigate=on_navigate
         )
 
-    def on_modified(self, view):
-        view.erase_regions("syntacticDiag")
+    def on_modified(self):
+        if not self.is_csharp():
+            return
+
+        self.view.erase_regions("syntacticDiag")
