@@ -43,6 +43,7 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
     proc = None
     se_game_dir = None
     thumb = None
+    ext = None
 
     def run(self, **kwargs):
         try:
@@ -195,6 +196,10 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
         if os.path.isfile(self.main):
             targets.insert(0, self.main)
 
+        # files with ext classes must go last
+        if os.path.isfile(self.ext):
+            targets.append(self.ext)
+
         return targets if len(targets) else None
 
     def import_settings(self):
@@ -215,6 +220,7 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
         self.files = manifest.get("files", default_files)
         self.thumb = manifest.get("thumb", default_thumb)
         self.se_game_dir = os.path.realpath(manifest.get("se_game_dir", default_se_game_dir))
+        self.ext = os.path.realpath(manifest.get("ext", ""))
 
         return True
 
