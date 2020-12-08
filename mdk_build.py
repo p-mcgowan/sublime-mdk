@@ -194,7 +194,6 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
         targets = list(files.keys())
         if os.path.isfile(self.main):
             targets.insert(0, self.main)
-        self.log("\n".join(targets))
 
         return targets if len(targets) else None
 
