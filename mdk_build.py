@@ -175,17 +175,26 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
 
             files[filename] = True
 
-        for part in re.split(r'\ *,+\ *', self.files):
-            for file in glob.glob(part):
-                if os.path.isdir(file):
-                    for script in glob.glob("{}/**".format(file)):
-                        add_file(script)
-                else:
-                    add_file(file)
+        def read_manifest_files(base_dir, target_files):
+            for part in re.split(r'\ *,+\ *', target_files):
+                for file in glob.glob(os.path.join(base_dir, part)):
+                    if os.path.isdir(file):
+                        if os.path.isfile(os.path.join(file, self.manifest_filename)):
+                            manifest = self.read_manifest(os.path.join(file, self.manifest_filename))
+                            if manifest is not None:
+                                read_manifest_files(file, manifest.get("files", ""))
+                        else:
+                            for script in glob.glob("{}/**".format(file)):
+                                add_file(script)
+                    else:
+                        add_file(os.path.join(base_dir, file))
+
+        read_manifest_files("./", self.files)
 
         targets = list(files.keys())
         if os.path.isfile(self.main):
             targets.insert(0, self.main)
+        self.log("\n".join(targets))
 
         return targets if len(targets) else None
 
@@ -210,6 +219,10 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
 
         return True
 
+    def read_manifest(self, file_path):
+        with open(file_path) as settings:
+            return sublime.decode_value(settings.read())
+
     def find_manifest(self):
         os.chdir(self.working_dir)
         for i in range(100):
@@ -218,10 +231,8 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
                 if here == self.mdk_root:
                     self.log("Refusing to build the plugin folder")
                     return None
-                else:
-                    with open(os.path.join(os.getcwd(), self.manifest_filename)) as settings:
-                        self.manifest_dir = here
-                        return sublime.decode_value(settings.read())
+                self.manifest_dir = here
+                return self.read_manifest(os.path.join(os.getcwd(), self.manifest_filename))
 
             os.chdir('../')
             if os.getcwd() == here:
