@@ -192,7 +192,7 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
 
         read_manifest_files("./", self.files)
 
-        targets = list(files.keys())
+        targets = sorted(list(files.keys()))
         if os.path.isfile(self.main):
             targets.insert(0, self.main)
 
@@ -478,11 +478,11 @@ class SeMdkEventListener(sublime_plugin.ViewEventListener):
             location=point,
             max_height=300,
             max_width=view.viewport_extent()[0]
-            # on_navigate=on_navigate
+            # on_navigate=self.view.erase_regions("syntacticDiag")
         )
 
-    def on_modified(self):
-        if not self.is_csharp():
-            return
+    # def on_modified(self):
+    #     if not self.is_csharp():
+    #         return
 
-        self.view.erase_regions("syntacticDiag")
+    #     self.view.erase_regions("syntacticDiag")
