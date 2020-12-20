@@ -44,6 +44,7 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
     se_game_dir = None
     thumb = None
     ext = None
+    manifest = None
 
     def run(self, **kwargs):
         try:
@@ -65,7 +66,6 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
             return 1
 
         compile_files = self.prepare(targets)
-        # self.log("\n".join(compile_files))
 
         bat_file = self.generate_compile_script(compile_files)
         thread = self.start_compile_thread(bat_file, targets)
@@ -94,13 +94,14 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
 
         content = None
 
-        with open(bat_tpl, "r") as bat_head:
+        with open(bat_tpl, "r") as bat_tpl:
             content = (
-                bat_head.read()
+                bat_tpl.read()
                 .replace("MDK_ROOT", self.mdk_root)
                 .replace("SE_GAME_DIR", self.se_game_dir)
                 .replace("INJECT_FILES", '" "'.join(files))
-            ).replace("\n", " ")
+            ).replace("\n", " ").replace(", ", ",")
+
 
         with open(bat_out, "w") as bat_file:
             bat_file.write(content)
@@ -108,7 +109,8 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
         return bat_out
 
     def on_success(self, files):
-        for file in ['Bootstrapper.exe', 'compile.bat']:
+        # for file in ['Bootstrapper.exe', 'compile.bat']:
+        for file in ['compile.bat']:
             try:
                 os.remove(os.path.join(self.build_dir, file))
             except:
@@ -145,7 +147,8 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
             tail = tail_file.read().rstrip()
 
         for target in targets:
-            out_file = os.path.join(self.build_dir, to_build_dir(target))
+            relative_output = to_build_dir(target)
+            out_file = os.path.join(self.build_dir, relative_output)
 
             try:
                 os.makedirs(os.path.dirname(out_file))
@@ -158,7 +161,7 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
                     output.write(in_fd.read())
                 output.write(tail)
 
-            compile_files.append(out_file)
+            compile_files.append(os.path.normpath(relative_output))
 
         compile_files.reverse() # make main last
 
@@ -213,6 +216,7 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
 
         self.setup_build_panel()
 
+        self.manifest = manifest
         self.encoding = manifest.get("encoding", default_encoding)
         self.build_dir = os.path.realpath(manifest.get("build_dir", default_build_dir))
         self.output = os.path.realpath(manifest.get("output", default_output))
