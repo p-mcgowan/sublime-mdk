@@ -45,6 +45,7 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
     thumb = None
     ext = None
     manifest = None
+    allowLinq = False
 
     def run(self, **kwargs):
         try:
@@ -95,12 +96,13 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
         content = None
 
         with open(bat_tpl, "r") as bat_tpl:
-            content = (
-                bat_tpl.read()
+            tpl = (bat_tpl.read()
                 .replace("MDK_ROOT", self.mdk_root)
                 .replace("SE_GAME_DIR", self.se_game_dir)
-                .replace("INJECT_FILES", '" "'.join(files))
-            ).replace("\n", " ").replace(", ", ",")
+                .replace("INJECT_FILES", '" "'.join(files)))
+            if not self.allowLinq:
+                tpl = tpl.replace(r"^.*Linq.*", "")
+            content = tpl.replace("\n", " ").replace(", ", ",")
 
 
         with open(bat_out, "w") as bat_file:
@@ -142,6 +144,8 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
 
         with open(os.path.join(self.mdk_root, 'MDK/head.cs')) as head_file:
             head = head_file.read().rstrip()
+            if not self.allowLinq:
+                head = head.replace('using System.Linq;', '')
 
         with open(os.path.join(self.mdk_root, 'MDK/tail.cs')) as tail_file:
             tail = tail_file.read().rstrip()
@@ -223,6 +227,7 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
         self.main = os.path.realpath(manifest.get("main", default_main))
         self.files = manifest.get("files", default_files)
         self.thumb = manifest.get("thumb", default_thumb)
+        self.allowLinq = manifest.get("allowLinq", False)
         self.se_game_dir = os.path.realpath(manifest.get("se_game_dir", default_se_game_dir))
         self.ext = os.path.realpath(manifest.get("ext", ""))
 
