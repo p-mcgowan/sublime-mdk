@@ -20,6 +20,12 @@
   // SE game dir (if it's installed elsewhere)
   "se_game_dir": "c:\\program files (x86)\\steam\\SteamApps\\common\\SpaceEngineers",
 
+  // if true, will minify the program after building to save space
+  "minify": true,
+
+  // optionally, preserve the unminified version of the output file
+  "unminified_file": "Unminified.cs",
+
   // if you are doing the extention / utility classes hack, you need to add that last...
   "ext": "../extclass.cs"
 }

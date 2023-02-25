@@ -18,3 +18,5 @@ If you have SE installed somewhere other than c...steamapps..common whatever, th
 
 Thanks to [malware](https://github.com/malware-dev)
 Inspired by [mdk-se](https://github.com/malware-dev/MDK-SE)
+
+See [example settings file](./mdk.sublime-settings) for more in-depth usage.

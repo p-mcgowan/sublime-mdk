@@ -46,6 +46,8 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
     ext = None
     manifest = None
     allowLinq = False
+    minify = False
+    unminified_file = None
 
     def run(self, **kwargs):
         try:
@@ -60,6 +62,9 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
         self.log("Build started: {}".format(datetime.now()))
 
         self.hide_errors()
+
+        # if minifier selected
+        #   create minifier if not exists
 
         targets = self.collect_build_files()
         if targets is None:
@@ -111,7 +116,6 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
         return bat_out
 
     def on_success(self, files):
-        # for file in ['Bootstrapper.exe', 'compile.bat']:
         for file in ['compile.bat']:
             try:
                 os.remove(os.path.join(self.build_dir, file))
@@ -133,6 +137,14 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
             for f in files:
                 with open(f, 'rb') as in_fd:
                     shutil.copyfileobj(in_fd, out_fd)
+
+        # self.proc = None
+        if self.minify:
+          self.log("Minification started: {}".format(datetime.now()))
+          thread = threading.Thread(target=self.run_minify_in_thread)
+          thread.start()
+
+          return thread;
 
     def prepare(self, targets):
         shutil.rmtree(self.build_dir, ignore_errors=True)
@@ -230,6 +242,8 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
         self.allowLinq = manifest.get("allowLinq", False)
         self.se_game_dir = os.path.realpath(manifest.get("se_game_dir", default_se_game_dir))
         self.ext = os.path.realpath(manifest.get("ext", ""))
+        self.minify = manifest.get("minify", False)
+        self.unminified_file = manifest.get("unminified_file", None)
 
         return True
 
@@ -293,11 +307,54 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
         self.log(stdout.decode(self.encoding).replace(self.build_dir, self.manifest_dir))
 
         if self.proc.returncode == 0:
-            self.on_success(targets)
             self.log("Build success")
+            self.on_success(targets)
         else:
-            self.show_errors()
             self.log("Build failed ({})".format(self.proc.returncode))
+            self.show_errors()
+
+
+        return self.proc.returncode
+
+    def run_minify_in_thread(self):
+        input_file = self.output
+        output_file = self.output
+
+        if self.unminified_file is not None:
+          input_file = os.path.realpath(self.unminified_file)
+          shutil.copyfile(self.output, input_file)
+
+
+        if self.proc is not None:
+            self.proc.terminate()
+            self.proc = None
+
+
+        path_to_exe = os.path.join(self.mdk_root, "lib", "min", "mdkmin.exe")
+
+        SW_HIDE = 0
+        info = subprocess.STARTUPINFO()
+        info.dwFlags = subprocess.STARTF_USESHOWWINDOW
+        info.wShowWindow = SW_HIDE
+
+        self.proc = subprocess.Popen([path_to_exe, input_file, output_file], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=self.build_dir, startupinfo=info)
+        self.killed = False
+
+        def kill():
+            self.log("Timeout - killing")
+            subprocess.call(['taskkill', '/F', '/T', '/PID',  str(self.proc.pid)], startupinfo=info)
+
+        t = threading.Timer(10.0, kill)
+        t.start()
+        stdout, stderr = self.proc.communicate()
+        t.cancel()
+        self.log(stdout.decode(self.encoding).replace(self.build_dir, self.manifest_dir))
+
+        if self.proc.returncode == 0:
+            self.log("Minification complete")
+        else:
+            self.log("Minification failed ({})".format(self.proc.returncode))
+            self.show_errors()
 
 
         return self.proc.returncode
