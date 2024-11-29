@@ -19,7 +19,9 @@ default_output = "Script.cs"
 default_main = "main.cs"
 default_files = "*"
 default_thumb = True
-default_se_game_dir = "c:\\program files (x86)\\steam\\SteamApps\\common\\SpaceEngineers"
+default_se_game_dir = "C:\\program files (x86)\\steam\\SteamApps\\common\\SpaceEngineers"
+default_csc_dir = "C:\\Program Files\\dotnet\\sdk\\8.0.404\\Roslyn\\bincore"
+default_dotnet_48_dir = "C:\\Program Files (x86)\\Reference Assemblies\\Microsoft\\Framework\\.NETFramework\\v4.8"
 
 error_style = sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE | sublime.DRAW_SQUIGGLY_UNDERLINE
 errs_by_file = {}
@@ -42,6 +44,7 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
     panel_lock = threading.Lock()
     proc = None
     se_game_dir = None
+    csc_dir = None
     thumb = None
     ext = None
     manifest = None
@@ -72,8 +75,10 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
             return 1
 
         compile_files = self.prepare(targets)
+        bat_tpl = os.path.join(self.mdk_root, "MDK/compile.bat")
+        bat_out = os.path.join(self.build_dir, "compile.bat")
 
-        bat_file = self.generate_compile_script(compile_files)
+        bat_file = self.generate_bat_script(bat_tpl, bat_out, compile_files)
         thread = self.start_compile_thread(bat_file, targets)
 
     def setup_build_panel(self):
@@ -89,10 +94,7 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
             if preferences.get("show_panel_on_build"):
                 self.window.run_command("show_panel", { "panel": "output.panel" })
 
-    def generate_compile_script(self, files):
-        bat_out = os.path.join(self.build_dir, "compile.bat")
-        bat_tpl = os.path.join(self.mdk_root, "MDK/compile.bat")
-
+    def generate_bat_script(self, bat_tpl, bat_out, files = []):
         try:
             os.remove(bat_out)
         except:
@@ -104,11 +106,12 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
             tpl = (bat_tpl.read()
                 .replace("MDK_ROOT", self.mdk_root)
                 .replace("SE_GAME_DIR", self.se_game_dir)
+                .replace("CSC_DIR", self.csc_dir)
+                .replace("DOTNET_48_DIR", self.dotnet_48_dir)
                 .replace("INJECT_FILES", '" "'.join(files)))
             if not self.allowLinq:
                 tpl = tpl.replace(r"^.*Linq.*", "")
             content = tpl.replace("\n", " ").replace(", ", ",")
-
 
         with open(bat_out, "w") as bat_file:
             bat_file.write(content)
@@ -241,6 +244,8 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
         self.thumb = manifest.get("thumb", default_thumb)
         self.allowLinq = manifest.get("allowLinq", False)
         self.se_game_dir = os.path.realpath(manifest.get("se_game_dir", default_se_game_dir))
+        self.csc_dir = os.path.realpath(manifest.get("csc_dir", default_csc_dir))
+        self.dotnet_48_dir = os.path.realpath(manifest.get("dotnet_48_dir", default_dotnet_48_dir))
         self.ext = os.path.realpath(manifest.get("ext", ""))
         self.minify = manifest.get("minify", False)
         self.unminified_file = manifest.get("unminified_file", None)
@@ -317,6 +322,11 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
         return self.proc.returncode
 
     def run_minify_in_thread(self):
+        SW_HIDE = 0
+        info = subprocess.STARTUPINFO()
+        info.dwFlags = subprocess.STARTF_USESHOWWINDOW
+        info.wShowWindow = SW_HIDE
+
         input_file = self.output
         output_file = self.output
 
@@ -324,19 +334,33 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
           input_file = os.path.realpath(self.unminified_file)
           shutil.copyfile(self.output, input_file)
 
-
         if self.proc is not None:
             self.proc.terminate()
             self.proc = None
 
+        path_to_exe = os.path.join(self.mdk_root, "MDK","bin","mdkmin.exe")
+        if not os.path.isfile(path_to_exe):
+            self.log("Minification cannot run .exe (needs to be build - good luck...). Looked here: {}".format(path_to_exe))
+            raise "Minifier needs to be build - good luck..."
 
-        path_to_exe = os.path.join(self.mdk_root, "lib", "min", "mdkmin.exe")
+            print("Building minifier")
+            bat_tpl = os.path.join(self.mdk_root, "MDK","minifier.bat")
+            out_bat = os.path.join(self.mdk_root, "MDK","bin","minifier-compiled.bat")
+            res = self.generate_bat_script(bat_tpl, out_bat)
+            self.proc = subprocess.Popen([out_bat], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, startupinfo=info)
+            stdout, stderr = self.proc.communicate()
+            self.log(stdout.decode(self.encoding).replace(self.build_dir, self.manifest_dir))
 
-        SW_HIDE = 0
-        info = subprocess.STARTUPINFO()
-        info.dwFlags = subprocess.STARTF_USESHOWWINDOW
-        info.wShowWindow = SW_HIDE
+            if self.proc.returncode != 0:
+                self.log("Minification failed ({})".format(self.proc.returncode))
+                self.show_errors()
+                return self.proc.returncode
+            else:
+                print("worked?")
+                print("C:\\Users\\mcgow\\AppData\\Roaming\\Sublime Text 3\\Packages\\se-mdk\\lib\\mdkmin.exe")
+                print(path_to_exe)
 
+        print("running {} on in: {} and out: {}".format(path_to_exe, input_file, output_file))
         self.proc = subprocess.Popen([path_to_exe, input_file, output_file], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=self.build_dir, startupinfo=info)
         self.killed = False
 

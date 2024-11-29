@@ -174,6 +174,12 @@ System.DateTimeKind+*, mscorlib
 System.MidpointRounding+*, mscorlib
 System.EventArgs+*, mscorlib
 System.Buffer+*, mscorlib
+System.ComponentModel.INotifyPropertyChanging+*, System
+System.ComponentModel.PropertyChangingEventHandler+*, System
+System.ComponentModel.PropertyChangingEventArgs+*, System
+System.ComponentModel.INotifyPropertyChanged+*, System
+System.ComponentModel.PropertyChangedEventHandler+*, System
+System.ComponentModel.PropertyChangedEventArgs+*, System
 System.Reflection.MemberInfo, mscorlib
 System.Reflection.MemberInfo.Name, mscorlib
 System.Type, mscorlib
@@ -251,6 +257,7 @@ VRage.Game.ModAPI.Ingame.Utilities.*, VRage.Game
 Sandbox.ModAPI.Ingame.*, Sandbox.Common
 VRageMath.*, VRage.Math
 VRage.Game.GUI.TextPanel.*, VRage.Game
+SpaceEngineers.Game.ModAPI.Ingame.IMyTurretControlBlock+*, Sandbox.Common
 Sandbox.Game.Gui.TerminalActionExtensions+*, Sandbox.Game
 Sandbox.ModAPI.Interfaces.ITerminalAction+*, Sandbox.Common
 Sandbox.ModAPI.Interfaces.ITerminalProperty+*, Sandbox.Common
@@ -270,11 +277,11 @@ VRage.MyTupleComparer<T1, T2>+*, VRage.Library
 VRage.MyTupleComparer<T1, T2, T3>+*, VRage.Library
 VRage.MyTexts.MyLanguageDescription+*, VRage
 VRage.MyLanguagesEnum+*, VRage
-VRage.Game.Components.MyComponentContainer, VRage.Game
-VRage.Game.Components.MyComponentContainer.TryGet<T>(out T), VRage.Game
-VRage.Game.Components.MyComponentContainer.Has<T>(), VRage.Game
-VRage.Game.Components.MyComponentContainer.Get<T>(), VRage.Game
-VRage.Game.Components.MyComponentContainer.TryGet(System.Type, out VRage.Game.Components.MyComponentBase), VRage.Game
+VRage.Game.Components.Interfaces.IMyComponentContainer, VRage.Game
+VRage.Game.Components.Interfaces.IMyComponentContainer.TryGet<T>(out T), VRage.Game
+VRage.Game.Components.Interfaces.IMyComponentContainer.Has<T>(), VRage.Game
+VRage.Game.Components.Interfaces.IMyComponentContainer.Get<T>(), VRage.Game
+VRage.Game.Components.Interfaces.IMyComponentContainer.TryGet(System.Type, out VRage.Game.Components.MyComponentBase), VRage.Game
 VRage.Collections.ListReader<T>+*, VRage.Library
 VRage.Game.MyDefinitionId+*, VRage.Game
 VRage.Game.MyRelationsBetweenPlayerAndBlock+*, VRage.Game

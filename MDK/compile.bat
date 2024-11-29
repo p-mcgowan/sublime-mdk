@@ -1,4 +1,4 @@
-@"MDK_ROOT\lib\csc.exe"
+@dotnet.exe exec "CSC_DIR\csc.dll"
 /noconfig
 /nowarn:1701,1702,2008
 /fullpaths
@@ -9,8 +9,8 @@
 /preferreduilang:en-US
 /highentropyva+
 /lib:"MDK_ROOT\MDK"
-/lib:"MDK_ROOT\lib"
 /lib:"SE_GAME_DIR\Bin64"
+/lib:"DOTNET_48_DIR"
 /reference:MDKUtilities.dll,
 mscorlib.dll,
 netstandard.dll,
@@ -32,15 +32,12 @@ VRage.Render11.dll,
 VRage.Scripting.dll
 /filealign:512
 /out:"%TEMP%\mdkscript.exe"
-/ruleset:"MDK_ROOT\lib\MinimumRecommendedRules.ruleset"
 /subsystemversion:6.00
 /utf8output
 /langversion:6
-/analyzer:"MDKAnalyzer.dll"
-/additionalfile:"MDK_ROOT\MDK\MDK.options.props"
-/additionalfile:"MDK_ROOT\MDK\MDK.paths.props"
+/analyzer:Mal.Mdk2.PbAnalyzers.dll
+/analyzer:Microsoft.Extensions.FileSystemGlobbing.dll
 /additionalfile:"MDK_ROOT\MDK\thumb.png"
-/additionalfile:"MDK_ROOT\MDK\whitelist.cache"
 "MDK_ROOT\MDK\Bootstrapper.cs"
 "INJECT_FILES"
-"MDK_ROOT\MDK\.NETFramework,Version=v4.6.1.AssemblyAttributes.cs"
+"MDK_ROOT\MDK\.NETFramework,Version=v4.8.AssemblyAttributes.cs"

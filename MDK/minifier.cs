@@ -1,7 +1,3 @@
-/*
-([system.reflection.assembly]::loadfile("AppData\Roaming\Sublime Text 3\Packages\se-mdk\lib\System.Collections.Immutable.dll")).FullName
-([system.reflection.assembly]::loadfile("AppData\Roaming\Sublime Text 3\Packages\se-mdk\lib\Microsoft.CodeAnalysis.dll")).FullName
-*/
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;

@@ -4,7 +4,7 @@
   "build_dir": "./build",
 
   // main output file
-  "output": "Script.cs",
+  "output": "script.cs",
 
   // main input file - entrypoint for all other scripts (usually the one with public Program...)
   "main": "src/main.cs",
@@ -18,10 +18,17 @@
   "thumb": true,
 
   // SE game dir (if it's installed elsewhere)
-  "se_game_dir": "c:\\program files (x86)\\steam\\SteamApps\\common\\SpaceEngineers",
+  "se_game_dir": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\SpaceEngineers",
+
+  // csc folder with dlls used by dotnet compile
+  "csc_dir": "C:\\Program Files\\dotnet\\sdk\\8.0.404\\Roslyn\\bincore",
+
+  // dotnet 4.8 install folder
+  "dotnet_48_dir": "C:\\Program Files (x86)\\Reference Assemblies\\Microsoft\\Framework\\.NETFramework\\v4.8",
 
   // if true, will minify the program after building to save space
-  "minify": true,
+  // "minify": true,
+  "minify": false,
 
   // optionally, preserve the unminified version of the output file
   "unminified_file": "Unminified.cs",
