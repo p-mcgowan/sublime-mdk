@@ -8,6 +8,7 @@ dotnet.exe exec "CSC_DIR\csc.dll"
 /errorendlocation
 /preferreduilang:en-US
 /highentropyva+
+/lib:"MDK_ROOT\MDK\bin"
 /lib:"SE_GAME_DIR\Bin64"
 /lib:"DOTNET_48_DIR"
 /lib:"DOTNET_48_DIR\Facades"
@@ -23,8 +24,10 @@ mscorlib.dll,
 System.Core.dll,
 System.Runtime.CompilerServices.Unsafe.dll
 /filealign:512
-/out:"MDK_ROOT\bin\mdkmin.exe"
+/out:"MDK_ROOT\MDK\bin\mdkmin.exe"
 /subsystemversion:6.00
 /target:exe
 /utf8output
-/langversion:7.3 "MDK_ROOT\MDK\minifier.cs" "MDK_ROOT\MDK\.NETFramework,Version=v4.8.AssemblyAttributes.cs"
+/langversion:7.3
+"MDK_ROOT\MDK\minifier.cs"
+"MDK_ROOT\MDK\.NETFramework,Version=v4.8.AssemblyAttributes.cs"

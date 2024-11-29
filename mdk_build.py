@@ -340,9 +340,6 @@ class MdkBuildCommand(sublime_plugin.WindowCommand):
 
         path_to_exe = os.path.join(self.mdk_root, "MDK","bin","mdkmin.exe")
         if not os.path.isfile(path_to_exe):
-            self.log("Minification cannot run .exe (needs to be build - good luck...). Looked here: {}".format(path_to_exe))
-            raise "Minifier needs to be build - good luck..."
-
             print("Building minifier")
             bat_tpl = os.path.join(self.mdk_root, "MDK","minifier.bat")
             out_bat = os.path.join(self.mdk_root, "MDK","bin","minifier-compiled.bat")
